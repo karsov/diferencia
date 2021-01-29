@@ -544,29 +544,29 @@ func diferenciaHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, err.Error())
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+
+	if Config.Mirroring {
+		MirrorResponse(primaryCommunication, w)
+		goto logging
+	}
+
 	if result.EqualContent {
-		if Config.Mirroring {
-			MirrorResponse(primaryCommunication, w)
-		} else {
-			if Config.ReturnResult {
-				content, _ := result.MarshallJson()
-				w.Write(content)
-			}
-			w.WriteHeader(http.StatusOK)
-		}
+		w.WriteHeader(http.StatusOK)
+	} else {
+		// If there is a regression
+		w.WriteHeader(http.StatusPreconditionFailed)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if Config.ReturnResult {
+		content, _ := result.MarshallJson()
+		w.Write(content)
+	}
+
+logging:
+	if result.EqualContent {
 		exporter.IncrementSuccess(r.Method, r.URL.Path, result.PrimaryElapsedTime, result.CandidateElapsedTime)
 	} else {
 		// If there is a regression
-		if Config.Mirroring {
-			MirrorResponse(primaryCommunication, w)
-		} else {
-			w.WriteHeader(http.StatusPreconditionFailed)
-			if Config.ReturnResult {
-				content, _ := result.MarshallJson()
-				w.Write(content)
-			}
-		}
 		if Config.Prometheus {
 			prometheusCounter.WithLabelValues(r.Method, r.URL.Path).Inc()
 		}
